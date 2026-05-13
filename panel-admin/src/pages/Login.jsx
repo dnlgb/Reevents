@@ -1,3 +1,5 @@
+import logoCur from '../assets/logoCur.png'
+
 export function Login({
   loginEmail,
   setLoginEmail,
@@ -10,6 +12,13 @@ export function Login({
   return (
     <div className="admin-app admin-app--center">
         <div className="admin-card admin-card--narrow">
+          <div className="admin-login-logo-wrap">
+            <img
+              src={logoCur}
+              alt="Corporación Universitaria Reformada"
+              className="admin-login-logo"
+            />
+          </div>
           <h2 className="admin-card-title">Acceso administrador</h2>
           <p className="admin-muted admin-mb">Corporación Universitaria Reformada · ReEvents</p>
           <form className="admin-form" onSubmit={handleLogin}>

@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './lib/supabase.js'
-import { AdminStyles } from './components/AdminStyles.jsx'
 import { Login } from './pages/Login.jsx'
 import { Dashboard } from './pages/Dashboard.jsx'
-import { Eventos } from './pages/Eventos.jsx'
-import { Asistentes } from './pages/Asistentes.jsx'
-
-const CATEGORIAS = ['Conferencia', 'Deporte', 'Cultura']
 
 const emptyEventForm = {
   titulo: '',
   descripcion: '',
-  categoria: 'Conferencia',
+  categoria: '',
   fecha: '',
   hora: '',
   lugar: '',
@@ -34,6 +29,7 @@ function App() {
     popularLabel: '—',
   })
   const [statsLoading, setStatsLoading] = useState(false)
+  const [asistenciasCount, setAsistenciasCount] = useState({})
 
   const [events, setEvents] = useState([])
   const [eventsLoading, setEventsLoading] = useState(false)
@@ -43,6 +39,12 @@ function App() {
   const [editingEventImagenUrl, setEditingEventImagenUrl] = useState('')
   const [eventSaving, setEventSaving] = useState(false)
 
+  const [categorias, setCategorias] = useState([])
+  const [categoriasLoading, setCategoriasLoading] = useState(false)
+  const [categoriaForm, setCategoriaForm] = useState({ nombre: '' })
+  const [categoriaSaving, setCategoriaSaving] = useState(false)
+
+  const [activeTab, setActiveTab] = useState('eventos')
   const [selectedEventId, setSelectedEventId] = useState('')
   const [asistentes, setAsistentes] = useState([])
   const [asistentesLoading, setAsistentesLoading] = useState(false)
@@ -79,8 +81,8 @@ function App() {
         .from('asistencias')
         .select('event_id')
 
+      const counts = {}
       if (!asErr && asRows?.length) {
-        const counts = {}
         for (const row of asRows) {
           const key = String(row.event_id)
           counts[key] = (counts[key] || 0) + 1
@@ -105,12 +107,8 @@ function App() {
         }
       }
 
-      setStats({
-        eventos,
-        usuarios,
-        asistencias: asistenciasTotal,
-        popularLabel,
-      })
+      setStats({ eventos, usuarios, asistencias: asistenciasTotal, popularLabel })
+      setAsistenciasCount(counts)
     } finally {
       setStatsLoading(false)
     }
@@ -132,6 +130,57 @@ function App() {
       setEventsLoading(false)
     }
   }, [])
+
+  const loadCategorias = useCallback(async () => {
+    setCategoriasLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('categorias')
+        .select('*')
+        .order('nombre', { ascending: true })
+      if (error) throw error
+      setCategorias(data ?? [])
+    } catch {
+      setCategorias([])
+    } finally {
+      setCategoriasLoading(false)
+    }
+  }, [])
+
+  const createCategoria = async (e) => {
+    e.preventDefault()
+    setCategoriaSaving(true)
+    try {
+      const nombre = categoriaForm.nombre.trim()
+      const nombreCapitalizado = nombre.charAt(0).toUpperCase() + nombre.slice(1)
+      const { error } = await supabase.from('categorias').insert({
+        nombre: nombreCapitalizado,
+      })
+      if (error) throw error
+      setCategoriaForm({ nombre: '' })
+      await loadCategorias()
+    } catch (err) {
+      alert(err.message ?? 'Error al crear la categoría')
+    } finally {
+      setCategoriaSaving(false)
+    }
+  }
+
+  const createCategoriaInline = useCallback(async (nombre) => {
+    const { error } = await supabase.from('categorias').insert({ nombre: nombre.trim() })
+    if (error) throw error
+    await loadCategorias()
+  }, [loadCategorias])
+
+  const deleteCategoria = async (cat) => {
+    if (!confirm(`¿Eliminar la categoría "${cat.nombre}"? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('categorias').delete().eq('id', cat.id)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await loadCategorias()
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -174,14 +223,14 @@ function App() {
   }, [ensureAdminProfile])
 
   useEffect(() => {
-    if (!authUser) return
-    if (view === 'dashboard') loadDashboardStats()
-    if (view === 'eventos') loadEvents()
-    if (view === 'asistentes') loadEvents()
-  }, [view, authUser, loadDashboardStats, loadEvents])
+    if (!authUser || view !== 'dashboard') return
+    loadDashboardStats()
+    loadEvents()
+    loadCategorias()
+  }, [view, authUser, loadDashboardStats, loadEvents, loadCategorias])
 
   useEffect(() => {
-    if (view !== 'asistentes' || !selectedEventId) {
+    if (activeTab !== 'asistentes' || !selectedEventId) {
       setAsistentes([])
       return
     }
@@ -193,8 +242,6 @@ function App() {
         .from('asistencias')
         .select('id, created_at, user_id')
         .eq('event_id', selectedEventId)
-
-
 
       if (error || !asRows?.length) {
         if (!cancelled) {
@@ -224,7 +271,7 @@ function App() {
 
     fetchAsistentes()
     return () => { cancelled = true }
-  }, [view, selectedEventId])
+  }, [activeTab, selectedEventId])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -273,7 +320,7 @@ function App() {
   const openCreateEvent = () => {
     setEditingEventId(null)
     setEditingEventImagenUrl('')
-    setEventForm({ ...emptyEventForm })
+    setEventForm({ ...emptyEventForm, categoria: categorias[0]?.nombre ?? '' })
     setEventFormOpen(true)
   }
 
@@ -340,13 +387,7 @@ function App() {
   }
 
   const deleteEvent = async (ev) => {
-    if (
-      !confirm(
-        `¿Eliminar el evento "${ev.titulo}"? Esta acción no se puede deshacer.`
-      )
-    ) {
-      return
-    }
+    if (!confirm(`¿Eliminar el evento "${ev.titulo}"? Esta acción no se puede deshacer.`)) return
     const { error } = await supabase.from('events').delete().eq('id', ev.id)
     if (error) {
       alert(error.message)
@@ -359,91 +400,61 @@ function App() {
 
   if (!authReady && view === 'login' && !loginError) {
     return (
-      <>
-        <AdminStyles />
-        <div className="admin-app admin-app--center">
-          <p className="admin-muted">Cargando…</p>
-        </div>
-      </>
+      <div className="admin-app admin-app--center">
+        <p className="admin-muted">Cargando…</p>
+      </div>
     )
   }
 
   if (view === 'login') {
     return (
-      <>
-        <AdminStyles />
-        <Login
-          loginEmail={loginEmail}
-          setLoginEmail={setLoginEmail}
-          loginPassword={loginPassword}
-          setLoginPassword={setLoginPassword}
-          loginError={loginError}
-          loginLoading={loginLoading}
-          handleLogin={handleLogin}
-        />
-      </>
+      <Login
+        loginEmail={loginEmail}
+        setLoginEmail={setLoginEmail}
+        loginPassword={loginPassword}
+        setLoginPassword={setLoginPassword}
+        loginError={loginError}
+        loginLoading={loginLoading}
+        handleLogin={handleLogin}
+      />
     )
   }
 
-  if (view === 'dashboard') {
-    return (
-      <>
-        <AdminStyles />
-        <Dashboard
-          onLogout={handleLogout}
-          statsLoading={statsLoading}
-          stats={stats}
-          onGoEventos={() => setView('eventos')}
-          onGoAsistentes={() => setView('asistentes')}
-        />
-      </>
-    )
-  }
-
-  if (view === 'eventos') {
-    return (
-      <>
-        <AdminStyles />
-        <Eventos
-          onLogout={handleLogout}
-          onBackDashboard={() => setView('dashboard')}
-          openCreateEvent={openCreateEvent}
-          events={events}
-          eventsLoading={eventsLoading}
-          openEditEvent={openEditEvent}
-          deleteEvent={deleteEvent}
-          eventFormOpen={eventFormOpen}
-          setEventFormOpen={setEventFormOpen}
-          eventSaving={eventSaving}
-          editingEventId={editingEventId}
-          eventForm={eventForm}
-          setEventForm={setEventForm}
-          saveEvent={saveEvent}
-          categorias={CATEGORIAS}
-          editingImagenUrl={editingEventImagenUrl}
-        />
-      </>
-    )
-  }
-
-  if (view === 'asistentes') {
-    return (
-      <>
-        <AdminStyles />
-        <Asistentes
-          onLogout={handleLogout}
-          onBackDashboard={() => setView('dashboard')}
-          events={events}
-          selectedEventId={selectedEventId}
-          setSelectedEventId={setSelectedEventId}
-          asistentes={asistentes}
-          asistentesLoading={asistentesLoading}
-        />
-      </>
-    )
-  }
-
-  return null
+  return (
+    <Dashboard
+        onLogout={handleLogout}
+        statsLoading={statsLoading}
+        stats={stats}
+        asistenciasCount={asistenciasCount}
+        events={events}
+        eventsLoading={eventsLoading}
+        openCreateEvent={openCreateEvent}
+        openEditEvent={openEditEvent}
+        deleteEvent={deleteEvent}
+        eventFormOpen={eventFormOpen}
+        setEventFormOpen={setEventFormOpen}
+        eventSaving={eventSaving}
+        editingEventId={editingEventId}
+        eventForm={eventForm}
+        setEventForm={setEventForm}
+        saveEvent={saveEvent}
+        categorias={categorias}
+        editingImagenUrl={editingEventImagenUrl}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        selectedEventId={selectedEventId}
+        setSelectedEventId={setSelectedEventId}
+        asistentes={asistentes}
+        asistentesLoading={asistentesLoading}
+        categoriasLoading={categoriasLoading}
+        categoriaForm={categoriaForm}
+        setCategoriaForm={setCategoriaForm}
+        categoriaSaving={categoriaSaving}
+        createCategoria={createCategoria}
+        deleteCategoria={deleteCategoria}
+        onCreateCategoria={createCategoriaInline}
+      />
+  )
 }
 
 export default App
