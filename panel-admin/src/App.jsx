@@ -95,7 +95,7 @@ function App() {
             topId = id
           }
         }
-        if (topId) {
+        if (topId && topN > 0) {
           const { data: ev } = await supabase
             .from('events')
             .select('titulo')
@@ -103,7 +103,7 @@ function App() {
             .maybeSingle()
           popularLabel = ev?.titulo
             ? `${ev.titulo} (${topN})`
-            : `ID: ${topId} (${topN})`
+            : `--`
         }
       }
 
@@ -345,7 +345,7 @@ function App() {
       const payload = {
         titulo: eventForm.titulo.trim(),
         descripcion: eventForm.descripcion.trim(),
-        categoria: eventForm.categoria,
+        categoria: eventForm.categoria.charAt(0).toUpperCase() + eventForm.categoria.slice(1),
         fecha: eventForm.fecha || null,
         hora: eventForm.hora || null,
         lugar: eventForm.lugar.trim(),

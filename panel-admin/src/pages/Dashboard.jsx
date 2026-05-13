@@ -19,7 +19,7 @@ function StatCard({ label, value, small, icon: Icon }) {
 function ActivityChart({ events }) {
   const now = new Date()
   const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    const d = new Date(now.getFullYear(), now.getMonth() - 2 + i, 1)
     return {
       label: d.toLocaleString('es-CO', { month: 'short' }),
       year: d.getFullYear(),
