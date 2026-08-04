@@ -63,3 +63,38 @@ Permite:
 Ambas aplicaciones comparten una misma base de datos en Supabase, 
 permitiendo que la información administrada desde el panel web esté disponible en tiempo real para los usuarios de la aplicación móvil.
 
+## instalación
+
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/dnlgb/Reevents.git
+cd Reevents
+```
+
+### 2. Configurar las variables de entorno
+
+Tanto la aplicación móvil como el panel administrativo requieren un archivo `.env` con las credenciales de Supabase.
+
+```env
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
+
+> **Nota:** Las credenciales no se incluyen en este repositorio.
+
+### 3. Ejecutar el panel administrativo
+
+```bash
+cd panel-admin
+npm install
+npm run dev
+```
+
+### 4. Ejecutar la aplicación móvil
+
+```bash
+cd mobile
+npm install
+npx expo start
+```
